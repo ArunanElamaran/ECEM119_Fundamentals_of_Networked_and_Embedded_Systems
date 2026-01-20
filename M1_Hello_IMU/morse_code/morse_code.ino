@@ -1,4 +1,4 @@
-#define TIME_UNIT 100
+#define TIME_UNIT 200
 
 // Create a dot in the sequence
 void morse(int bit)
@@ -21,11 +21,11 @@ void morse(int bit)
   else if(bit == 1)
     delay(3*TIME_UNIT);
 
-  // Duration required after each bit in the letter
-  delay(TIME_UNIT);
-
   // Turn off the LED again
   digitalWrite(LED_BUILTIN, LOW);
+
+  // Duration required after each bit in the letter
+  delay(TIME_UNIT);
 }
 
 void generate_sequence(char* seq, int len)
@@ -87,4 +87,10 @@ void loop() {
 
   // Delay for five seconds before repeating the message
   delay(5000);
+
+  // // TEST FOR BLINKING
+  // digitalWrite(LED_BUILTIN, HIGH);  // turn the LED on (HIGH is the voltage level)
+  // delay(200);                      // wait for a second
+  // digitalWrite(LED_BUILTIN, LOW);   // turn the LED off by making the voltage LOW
+  // delay(200);                      // wait for a second
 }
