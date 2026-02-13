@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	
+</head>
+
+<body>
+
+	<svg id="chart"></svg>
+
+</body>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<script type="application/javascript">
+
+	const SERVERADDRESS = "http://127.0.0.1:3000"
+
+	// basic SVG setup for line plots
+	const width = 800;
+	const height = 400;
+	const margin = { top: 20, right: 40, bottom: 30, left: 40 };
+
+	const svg = d3.select("#chart")
+		.attr("width", width)
+		.attr("height", height);
+
+	const plotWidth = width - margin.left - margin.right;
+	const plotHeight = height - margin.top - margin.bottom;
+
+	const g = svg.append("g")
+		.attr("transform", `translate(${margin.left},${margin.top})`);
+
+	// time series data buffer
+	const maxPoints = 200;
+	let data = [];
+
+	const xScale = d3.scaleLinear()
+		.range([0, plotWidth]);
+
+	const yScale = d3.scaleLinear()
+		.domain([-2, 2]) // accelerometer in g's (rough range)
+		.range([plotHeight, 0]);
+
+	const xAxisGroup = g.append("g")
+		.attr("transform", `translate(0,${plotHeight})`);
+
+	const yAxisGroup = g.append("g");
+
+	const lineX = d3.line()
+		.x((d, i) => xScale(i))
+		.y(d => yScale(d.x));
+
+	const lineY = d3.line()
+		.x((d, i) => xScale(i))
+		.y(d => yScale(d.y));
+
+	const lineZ = d3.line()
+		.x((d, i) => xScale(i))
+		.y(d => yScale(d.z));
+
+	const pathX = g.append("path")
+		.attr("fill", "none")
+		.attr("stroke", "red")
+		.attr("stroke-width", 1.5);
+
+	const pathY = g.append("path")
+		.attr("fill", "none")
+		.attr("stroke", "green")
+		.attr("stroke-width", 1.5);
+
+	const pathZ = g.append("path")
+		.attr("fill", "none")
+		.attr("stroke", "blue")
+		.attr("stroke-width", 1.5);
+
+	// simple legend so the viewer can associate each color with an axis
+	const legend = svg.append("g")
+		.attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+	const legendItems = [
+		{ label: "X axis", color: "red", y: 0 },
+		{ label: "Y axis", color: "green", y: 15 },
+		{ label: "Z axis", color: "blue", y: 30 },
+	];
+
+	legendItems.forEach(item => {
+		const gItem = legend.append("g")
+			.attr("transform", `translate(0, ${item.y})`);
+
+		gItem.append("line")
+			.attr("x1", 0)
+			.attr("x2", 20)
+			.attr("y1", 5)
+			.attr("y2", 5)
+			.attr("stroke", item.color)
+			.attr("stroke-width", 2);
+
+		gItem.append("text")
+			.attr("x", 25)
+			.attr("y", 9)
+			.style("font-size", "12px")
+			.text(item.label);
+	});
+
+	const updateChart = () => {
+		const n = data.length;
+		xScale.domain([Math.max(0, n - maxPoints), n - 1]);
+
+		xAxisGroup.call(d3.axisBottom(xScale).ticks(5).tickFormat(() => ""));
+		yAxisGroup.call(d3.axisLeft(yScale));
+
+		pathX.datum(data)
+			.attr("d", lineX);
+		pathY.datum(data)
+			.attr("d", lineY);
+		pathZ.datum(data)
+			.attr("d", lineZ);
+	};
+
+	// use XML HTTP request to grab data from the server (central)
+	let xmlhttp = new XMLHttpRequest()
+	xmlhttp.onreadystatechange = function () {
+		if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
+			let responseText = xmlhttp.responseText
+			let parsed = JSON.parse(responseText)
+
+			let x = parseFloat(parsed.x)
+			let y = parseFloat(parsed.y)
+			let z = parseFloat(parsed.z)
+
+			if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+				data.push({ x, y, z });
+				if (data.length > maxPoints) {
+					data = data.slice(data.length - maxPoints);
+				}
+				updateChart();
+			}
+		}
+	}
+
+	// periodically grab data
+	let getData = () => {
+		xmlhttp.open("POST", SERVERADDRESS, true)
+		xmlhttp.setRequestHeader("Content-type", "application/json")
+		xmlhttp.send("")
+		setTimeout(() => {
+			getData()
+		}, 50)
+	}
+
+	getData()
+
+</script>
+
+</html>

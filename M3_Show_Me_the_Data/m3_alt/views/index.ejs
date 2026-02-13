@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			margin: 20px;
+		}
+		.axis-container {
+			margin-bottom: 10px;
+		}
+		.axis-label {
+			display: inline-block;
+			width: 30px;
+		}
+		.axis-bar {
+			display: inline-block;
+			height: 20px;
+			background-color: steelblue;
+			vertical-align: middle;
+		}
+	</style>
+</head>
+
+<body>
+	<h2>IMU Accelerometer Axes</h2>
+	<div class="axis-container">
+		<span class="axis-label">X</span>
+		<div id="xBar" class="axis-bar"></div>
+	</div>
+	<div class="axis-container">
+		<span class="axis-label">Y</span>
+		<div id="yBar" class="axis-bar"></div>
+	</div>
+	<div class="axis-container">
+		<span class="axis-label">Z</span>
+		<div id="zBar" class="axis-bar"></div>
+	</div>
+</body>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+
+<script type="application/javascript">
+
+	const SERVERADDRESS = "http://127.0.0.1:3000"
+
+	// use XML HTTP request to grab data from the server (central)
+	let xmlhttp = new XMLHttpRequest()
+	xmlhttp.onreadystatechange = function () {
+		if (xmlhttp.readyState == 4 && xmlhttp.status == 200) {
+			let responseText = xmlhttp.responseText
+			let sensorObj = JSON.parse(responseText).sensorValue
+
+			let x = parseFloat(sensorObj.x)
+			let y = parseFloat(sensorObj.y)
+			let z = parseFloat(sensorObj.z)
+
+			// simple linear scale from acceleration (approx -2g to 2g) to bar width %
+			let scale = d3.scaleLinear()
+				.domain([-2, 2])
+				.range([0, 100])
+
+			d3.select("#xBar").style("width", scale(x) + "%")
+			d3.select("#yBar").style("width", scale(y) + "%")
+			d3.select("#zBar").style("width", scale(z) + "%")
+		}
+	}
+
+	// periodically grab data
+	let getData = () => {
+		xmlhttp.open("POST", SERVERADDRESS, true)
+		xmlhttp.setRequestHeader("Content-type", "application/json")
+		xmlhttp.send("")
+		setTimeout(() => {
+			getData()
+		}, 10)
+	}
+
+	getData()
+
+</script>
+
+</html>
