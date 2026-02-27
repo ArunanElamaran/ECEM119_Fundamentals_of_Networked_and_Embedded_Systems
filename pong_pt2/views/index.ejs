@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>IMU Pong</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Two-Player IMU-Controlled Pong</h1>
+      <p class="hint">
+        Each player uses an Arduino IMU paddle. Use palm-up / palm-down gestures to move your paddle up or down, and a vertical neutral orientation to stop.
+      </p>
+
+      <canvas id="pongCanvas" width="800" height="400"></canvas>
+
+      <div class="status">
+        <div class="paddle-status" id="p1Status">P1: searching…</div>
+        <div class="paddle-status" id="p2Status">P2: searching…</div>
+      </div>
+    </div>
+
+    <script src="/pong.js"></script>
+  </body>
+</html>
+

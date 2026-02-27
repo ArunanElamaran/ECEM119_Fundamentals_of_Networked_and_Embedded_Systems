@@ -1,0 +1,13 @@
+{
+  "name": "pong_pt1",
+  "version": "1.0.0",
+  "description": "One-player IMU-controlled Pong using Arduino WiFi IMU paddle",
+  "main": "central.js",
+  "scripts": {
+    "start": "node central.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ejs": "^3.1.10"
+  }
+}

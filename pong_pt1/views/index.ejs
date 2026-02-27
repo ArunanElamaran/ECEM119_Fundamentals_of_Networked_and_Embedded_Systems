@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>IMU Pong</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>IMU-Controlled Pong</h1>
+      <p class="hint">
+        Tilt your Arduino (around the Y axis) to move the left paddle up and down.
+      </p>
+
+      <canvas id="pongCanvas" width="800" height="400"></canvas>
+
+      <div class="status">
+        <span id="imuStatus">IMU: connecting…</span>
+        <span id="rawImu"></span>
+      </div>
+    </div>
+
+    <script src="/pong.js"></script>
+  </body>
+</html>
+
