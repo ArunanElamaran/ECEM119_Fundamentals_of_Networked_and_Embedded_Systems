@@ -8,7 +8,7 @@ const path = require('path');
 
 // Configure the Arduino paddle endpoint and expected name.
 // Set PONG_PADDLE_HOST in your environment to override the IP.
-const ARDUINO_HOST = process.env.PONG_PADDLE_HOST || '192.168.0.50';
+const ARDUINO_HOST = process.env.PONG_PADDLE_HOST || '172.20.10.7';
 const ARDUINO_PORT = 80;
 const ARDUINO_PATH = '/sensor';
 const EXPECTED_DEVICE_NAME = 'PongPaddle';
@@ -26,7 +26,16 @@ app.get('/', (req, res) => {
 });
 
 // Helper to request the latest IMU reading from the Arduino.
+// Ensures the callback is only invoked once (avoids ERR_HTTP_HEADERS_SENT
+// when both 'timeout' and 'error' fire).
 function fetchImuFromArduino(callback) {
+  let finished = false;
+  const done = (err, result) => {
+    if (finished) return;
+    finished = true;
+    callback(err, result);
+  };
+
   const options = {
     host: ARDUINO_HOST,
     port: ARDUINO_PORT,
@@ -43,17 +52,17 @@ function fetchImuFromArduino(callback) {
     resp.on('end', () => {
       try {
         const parsed = JSON.parse(data);
-        callback(null, parsed);
+        done(null, parsed);
       } catch (e) {
-        callback(e);
+        done(e);
       }
     });
   });
 
-  req.on('error', (err) => callback(err));
+  req.on('error', (err) => done(err));
   req.on('timeout', () => {
     req.destroy();
-    callback(new Error('Timeout talking to Arduino'));
+    done(new Error('Timeout talking to Arduino'));
   });
 
   req.end();

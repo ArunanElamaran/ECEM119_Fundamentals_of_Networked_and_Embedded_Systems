@@ -235,8 +235,8 @@ function handleSpecialGestures(playerIndex) {
     }
   }
 
-  // Horizontal swipe while in STOP: change background color
-  if (g === GESTURE.STOP) {
+  // Horizontal swipe while in STOP or UNKNOWN: change background color
+  if (g === GESTURE.STOP || g === GESTURE.UNKNOWN) {
     const current = history[history.length - 1];
     const lastSwipeTime =
       playerIndex === 1 ? lastSwipeTime1 : lastSwipeTime2;
