@@ -1,16 +1,14 @@
 // WiFi-based two-player Pong server
-// Fetches IMU data from two Arduino paddles over WiFi
-// and exposes it to the browser Pong game.
+// Player 1: Arduino paddle over WiFi. Player 2: keyboard on laptop.
+// Fetches IMU data from one Arduino and serves the browser Pong game.
 
 const http = require('http');
 const express = require('express');
 const path = require('path');
 
-// Configure the Arduino paddle endpoints.
-// Set PONG_PADDLE1_HOST and PONG_PADDLE2_HOST in your environment
-// to override these IPs (e.g., export PONG_PADDLE1_HOST=172.20.10.7).
+// Configure the Arduino paddle for player 1 only.
+// Set PONG_PADDLE1_HOST in your environment to override (e.g., export PONG_PADDLE1_HOST=172.20.10.7).
 const ARDUINO1_HOST = process.env.PONG_PADDLE1_HOST || '172.20.10.7';
-const ARDUINO2_HOST = process.env.PONG_PADDLE2_HOST || '172.20.10.8';
 const ARDUINO_PORT = 80;
 const ARDUINO_PATH = '/sensor';
 const EXPECTED_DEVICE_NAME = 'PongPaddle';
@@ -78,12 +76,14 @@ app.post('/sensor1', (req, res) => {
       return res.send(
         JSON.stringify({
           sensorValue: { x: NaN, y: NaN, z: NaN },
+          gyroValue: { x: NaN, y: NaN, z: NaN },
         }),
       );
     }
 
     const deviceName = aru && aru.deviceName;
     const sensorValue = aru && aru.sensorValue;
+    const gyroValue = aru && aru.gyroValue;
 
     if (deviceName !== EXPECTED_DEVICE_NAME || !sensorValue) {
       console.error(
@@ -94,56 +94,23 @@ app.post('/sensor1', (req, res) => {
       return res.send(
         JSON.stringify({
           sensorValue: { x: NaN, y: NaN, z: NaN },
+          gyroValue: { x: NaN, y: NaN, z: NaN },
         }),
       );
     }
 
     res.type('application/json');
-    res.send(JSON.stringify({ sensorValue }));
-  });
-});
-
-// Endpoint polled by the browser to get latest IMU data for player 2.
-app.post('/sensor2', (req, res) => {
-  fetchImuFromArduino(ARDUINO2_HOST, (err, aru) => {
-    if (err) {
-      console.error('Error fetching IMU from Arduino 2:', err.message);
-      res.type('application/json');
-      return res.send(
-        JSON.stringify({
-          sensorValue: { x: NaN, y: NaN, z: NaN },
-        }),
-      );
-    }
-
-    const deviceName = aru && aru.deviceName;
-    const sensorValue = aru && aru.sensorValue;
-
-    if (deviceName !== EXPECTED_DEVICE_NAME || !sensorValue) {
-      console.error(
-        'Unexpected device or missing sensor data from Arduino 2:',
-        deviceName,
-      );
-      res.type('application/json');
-      return res.send(
-        JSON.stringify({
-          sensorValue: { x: NaN, y: NaN, z: NaN },
-        }),
-      );
-    }
-
-    res.type('application/json');
-    res.send(JSON.stringify({ sensorValue }));
+    res.send(JSON.stringify({ sensorValue, gyroValue: gyroValue || { x: NaN, y: NaN, z: NaN } }));
   });
 });
 
 app.listen(port, () => {
   console.log(`Pong server listening at http://localhost:${port}`);
   console.log(
-    `Expecting Arduino paddle 1 at http://${ARDUINO1_HOST}:${ARDUINO_PORT}${ARDUINO_PATH} with name "${EXPECTED_DEVICE_NAME}"`,
-  );
-  console.log(
-    `Expecting Arduino paddle 2 at http://${ARDUINO2_HOST}:${ARDUINO_PORT}${ARDUINO_PATH} with name "${EXPECTED_DEVICE_NAME}"`,
+    `Player 1 (Arduino) at http://${ARDUINO1_HOST}:${ARDUINO_PORT}${ARDUINO_PATH} with name "${EXPECTED_DEVICE_NAME}". Player 2 uses keyboard.`,
   );
 });
+
+
+
 

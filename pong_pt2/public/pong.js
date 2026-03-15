@@ -1,5 +1,5 @@
-// Browser-side two-player Pong game that uses IMU data
-// from two Arduino paddles via HTTP POSTs to /sensor1 and /sensor2.
+// Browser-side two-player Pong game.
+// Player 1: IMU from Arduino via /sensor1. Player 2: keyboard (up/down = paddle, left = random color).
 
 const canvas = document.getElementById('pongCanvas');
 const ctx = canvas.getContext('2d');
@@ -13,7 +13,7 @@ const ballRadius = 8;
 let paddle1Y = (canvas.height - paddleHeight) / 2;
 let paddle2Y = (canvas.height - paddleHeight) / 2;
 
-// Gesture-driven velocities (keep moving until gesture changes)
+// Gesture-driven velocity for P1; keyboard-driven for P2
 let paddle1Vy = 0;
 let paddle2Vy = 0;
 const PADDLE_SPEED = 4;
@@ -31,25 +31,26 @@ let gameStarted = false;
 let isPaused = false;
 let bgColor = '#111';
 
-// History for gesture detection
+// History for P1 gesture detection
 const imu1History = [];
-const imu2History = [];
 const MAX_HISTORY = 20; // roughly 1 second at 20 Hz
 
 let lastShakeToggleTime1 = 0;
-let lastShakeToggleTime2 = 0;
 let lastSwipeTime1 = 0;
-let lastSwipeTime2 = 0;
 
-const SHAKE_THRESHOLD = 2.0;
-const SHAKE_COOLDOWN_MS = 800;
 const SWIPE_COOLDOWN_MS = 800;
+const KEYBOARD_COLOR_COOLDOWN_MS = 800;
 
-// IMU data and gesture state
+// Pause: only when in STOP/UNKNOWN and quick rotation around vertical axis (yaw) from gyro.
+// Gyro Z = yaw (deg/s). Threshold in deg/s.
+const GYRO_YAW_THRESHOLD = 80;
+const PAUSE_COOLDOWN_MS = 800;
+
+// IMU data and gesture state (player 1 only). lastImu1 = accel; lastGyro1 = gyro (deg/s).
 let lastImu1 = { x: NaN, y: NaN, z: NaN };
-let lastImu2 = { x: NaN, y: NaN, z: NaN };
+let lastGyro1 = { x: NaN, y: NaN, z: NaN };
 let imu1Connected = false;
-let imu2Connected = false;
+let lastKeyboardColorTime = 0;
 
 const GESTURE = {
   UP: 'up',
@@ -59,7 +60,6 @@ const GESTURE = {
 };
 
 let gesture1 = GESTURE.STOP;
-let gesture2 = GESTURE.STOP;
 
 // Gesture recognition:
 // Use palm orientation based on accelerometer Z axis.
@@ -81,9 +81,7 @@ function classifyGesture({ x, y, z }) {
   return GESTURE.UNKNOWN;
 }
 
-// Update gesture → velocity mapping.
-// Once a gesture is recognized, the paddle keeps moving in that
-// direction until another gesture (e.g., DOWN or STOP) is seen.
+// Update gesture → velocity for P1 only. P2 velocity is set by keyboard.
 function updatePaddleVelocities() {
   if (imu1Connected) {
     const g1 = classifyGesture(lastImu1);
@@ -100,22 +98,7 @@ function updatePaddleVelocities() {
   } else {
     paddle1Vy = 0;
   }
-
-  if (imu2Connected) {
-    const g2 = classifyGesture(lastImu2);
-    if (g2 === GESTURE.UP) {
-      gesture2 = GESTURE.UP;
-      paddle2Vy = -PADDLE_SPEED;
-    } else if (g2 === GESTURE.DOWN) {
-      gesture2 = GESTURE.DOWN;
-      paddle2Vy = PADDLE_SPEED;
-    } else if (g2 === GESTURE.STOP) {
-      gesture2 = GESTURE.STOP;
-      paddle2Vy = 0;
-    }
-  } else {
-    paddle2Vy = 0;
-  }
+  // paddle2Vy is updated by keyboard in keydown/keyup
 }
 
 // Poll IMU data for player 1
@@ -124,16 +107,26 @@ async function pollImu1() {
     const res = await fetch('/sensor1', { method: 'POST' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    const { sensorValue } = data || {};
+    const { sensorValue, gyroValue } = data || {};
     if (sensorValue) {
       lastImu1 = sensorValue;
+      if (gyroValue && typeof gyroValue.x === 'number' && typeof gyroValue.y === 'number' && typeof gyroValue.z === 'number') {
+        lastGyro1 = gyroValue;
+      }
       const validX = typeof sensorValue.x === 'number' && Number.isFinite(sensorValue.x);
       const validY = typeof sensorValue.y === 'number' && Number.isFinite(sensorValue.y);
       const validZ = typeof sensorValue.z === 'number' && Number.isFinite(sensorValue.z);
       imu1Connected = validX && validY && validZ;
 
       if (imu1Connected) {
-        imu1History.push({ ...sensorValue, t: Date.now() });
+        const g = lastGyro1 && typeof lastGyro1.z === 'number' ? lastGyro1 : { x: NaN, y: NaN, z: NaN };
+        imu1History.push({
+          ...sensorValue,
+          gx: g.x,
+          gy: g.y,
+          gz: g.z,
+          t: Date.now(),
+        });
         if (imu1History.length > MAX_HISTORY) imu1History.shift();
         handleSpecialGestures(1);
       }
@@ -148,42 +141,12 @@ async function pollImu1() {
   setTimeout(pollImu1, 50);
 }
 
-// Poll IMU data for player 2
-async function pollImu2() {
-  try {
-    const res = await fetch('/sensor2', { method: 'POST' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    const { sensorValue } = data || {};
-    if (sensorValue) {
-      lastImu2 = sensorValue;
-      const validX = typeof sensorValue.x === 'number' && Number.isFinite(sensorValue.x);
-      const validY = typeof sensorValue.y === 'number' && Number.isFinite(sensorValue.y);
-      const validZ = typeof sensorValue.z === 'number' && Number.isFinite(sensorValue.z);
-      imu2Connected = validX && validY && validZ;
-
-      if (imu2Connected) {
-        imu2History.push({ ...sensorValue, t: Date.now() });
-        if (imu2History.length > MAX_HISTORY) imu2History.shift();
-        handleSpecialGestures(2);
-      }
-    } else {
-      imu2Connected = false;
-    }
-  } catch {
-    imu2Connected = false;
-  }
-
-  updateImuStatus();
-  setTimeout(pollImu2, 50);
-}
-
+// Player 2 is always "ready" (keyboard). No polling.
 function updateImuStatus() {
   const p1StatusEl = document.getElementById('p1Status');
   const p2StatusEl = document.getElementById('p2Status');
 
   const g1 = classifyGesture(lastImu1);
-  const g2 = classifyGesture(lastImu2);
 
   if (imu1Connected) {
     p1StatusEl.textContent = `P1: connected (${g1})`;
@@ -191,92 +154,68 @@ function updateImuStatus() {
     p1StatusEl.textContent = 'P1: searching…';
   }
 
-  if (imu2Connected) {
-    p2StatusEl.textContent = `P2: connected (${g2})`;
-  } else {
-    p2StatusEl.textContent = 'P2: searching…';
-  }
+  p2StatusEl.textContent = 'P2: keyboard (↑↓ move, ← color)';
 
-  // Pause game if either paddle is not connected
-  if (!imu1Connected || !imu2Connected) {
+  // Pause game if P1 (Arduino) is not connected
+  if (!imu1Connected) {
     gameStarted = false;
     isPaused = false;
   }
 }
 
-// Detect vertical shakes (pause/play) and horizontal swipes (background color)
+// Detect vertical-axis rotation via gyro (pause/play) and horizontal swipe (background color) for P1 only.
+// Pause/unpause: only when in STOP or UNKNOWN and gyro shows quick rotation around vertical axis (yaw = gz).
 function handleSpecialGestures(playerIndex) {
+  if (playerIndex !== 1) return;
+
   const now = Date.now();
-  const history = playerIndex === 1 ? imu1History : imu2History;
-  const lastImu = playerIndex === 1 ? lastImu1 : lastImu2;
+  const history = imu1History;
+  const lastImu = lastImu1;
   const g = classifyGesture(lastImu);
 
-  // Vertical shake: quick large changes in Z over recent history
-  if (history.length >= 4) {
-    let sumAbsDeltaZ = 0;
-    for (let i = 1; i < history.length; i++) {
-      sumAbsDeltaZ += Math.abs(history[i].z - history[i - 1].z);
-    }
-
-    const lastShakeTime =
-      playerIndex === 1 ? lastShakeToggleTime1 : lastShakeToggleTime2;
-
+  // Pause toggle: only in STOP or UNKNOWN, and gyro yaw (z) exceeds threshold (quick twist)
+  if (g === GESTURE.STOP || g === GESTURE.UNKNOWN) {
+    const gz = lastGyro1 && typeof lastGyro1.z === 'number' && Number.isFinite(lastGyro1.z) ? lastGyro1.z : 0;
     if (
-      sumAbsDeltaZ > SHAKE_THRESHOLD &&
-      now - lastShakeTime > SHAKE_COOLDOWN_MS
+      Math.abs(gz) > GYRO_YAW_THRESHOLD &&
+      now - lastShakeToggleTime1 > PAUSE_COOLDOWN_MS
     ) {
-      // Toggle pause/play
       isPaused = !isPaused;
-      if (playerIndex === 1) {
-        lastShakeToggleTime1 = now;
-      } else {
-        lastShakeToggleTime2 = now;
-      }
+      lastShakeToggleTime1 = now;
     }
   }
 
   // Horizontal swipe while in STOP or UNKNOWN: change background color
   if (g === GESTURE.STOP || g === GESTURE.UNKNOWN) {
     const current = history[history.length - 1];
-    const lastSwipeTime =
-      playerIndex === 1 ? lastSwipeTime1 : lastSwipeTime2;
 
     if (
       current &&
       typeof current.x === 'number' &&
       Math.abs(current.x) > 0.7 &&
-      now - lastSwipeTime > SWIPE_COOLDOWN_MS
+      now - lastSwipeTime1 > SWIPE_COOLDOWN_MS
     ) {
-      // Change background color to a random dark-ish hue
       const hue = Math.floor(Math.random() * 360);
       bgColor = `hsl(${hue}, 60%, 20%)`;
-
-      if (playerIndex === 1) {
-        lastSwipeTime1 = now;
-      } else {
-        lastSwipeTime2 = now;
-      }
+      lastSwipeTime1 = now;
     }
   }
 }
 
 // Game loop
 function updateGame() {
-  // If both paddles are connected and the game hasn't started yet,
-  // start the round (but allow paddles to move even before this).
-  if (!gameStarted && imu1Connected && imu2Connected) {
-    // Both paddles just connected: start game and reset ball.
+  // If P1 is connected and the game hasn't started yet, start the round.
+  if (!gameStarted && imu1Connected) {
     gameStarted = true;
     resetBall();
   }
 
-  // If paused via vertical shake, freeze game state.
+  // If paused via vertical-axis rotation (P1), freeze game state.
   if (isPaused) {
     return;
   }
 
-  // Update paddle velocities based on latest gestures (always allow
-  // connected paddles to move, even before the game starts).
+  // Update paddle velocities: P1 from gestures, P2 from keyboard (set in keydown/keyup)
   updatePaddleVelocities();
 
   // Move paddles
@@ -293,9 +232,8 @@ function updateGame() {
     paddle2Y = canvas.height - paddleHeight;
   }
 
-  // If the game hasn't started yet or a paddle is disconnected,
-  // don't move the ball or update scoring.
-  if (!gameStarted || !imu1Connected || !imu2Connected) {
+  // If the game hasn't started yet or P1 is disconnected, don't move the ball.
+  if (!gameStarted || !imu1Connected) {
     return;
   }
 
@@ -401,8 +339,37 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-// Start everything
+// --- Player 2 keyboard controls (up/down = paddle, left = random color) ---
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowUp') {
+    paddle2Vy = -PADDLE_SPEED;
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown') {
+    paddle2Vy = PADDLE_SPEED;
+    e.preventDefault();
+  } else if (e.key === 'ArrowLeft') {
+    const now = Date.now();
+    if (now - lastKeyboardColorTime > KEYBOARD_COLOR_COOLDOWN_MS) {
+      const hue = Math.floor(Math.random() * 360);
+      bgColor = `hsl(${hue}, 60%, 20%)`;
+      lastKeyboardColorTime = now;
+    }
+    e.preventDefault();
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'ArrowUp' && paddle2Vy < 0) {
+    paddle2Vy = 0;
+    e.preventDefault();
+  } else if (e.key === 'ArrowDown' && paddle2Vy > 0) {
+    paddle2Vy = 0;
+    e.preventDefault();
+  }
+});
+
+// Start everything: poll P1 Arduino only; P2 uses keyboard
+updateImuStatus(); // show P2 keyboard hint immediately
 pollImu1();
-pollImu2();
 loop();
 

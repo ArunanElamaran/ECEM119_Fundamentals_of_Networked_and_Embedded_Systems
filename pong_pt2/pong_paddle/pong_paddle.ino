@@ -1,5 +1,5 @@
 // IMU-over-WiFi streamer for Pong paddle
-// Streams accelerometer data via a simple HTTP JSON endpoint.
+// Streams accelerometer and gyroscope data via a simple HTTP JSON endpoint.
 
 #include <SPI.h>
 #include <WiFiNINA.h>
@@ -18,6 +18,7 @@ int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 
 float ax, ay, az;
+float gx, gy, gz;
 
 void printWifiStatus() {
   Serial.print("SSID: ");
@@ -56,6 +57,10 @@ void setup() {
   Serial.print(IMU.accelerationSampleRate());
   Serial.println("Hz");
 
+  Serial.print("Gyroscope sample rate = ");
+  Serial.print(IMU.gyroscopeSampleRate());
+  Serial.println("Hz");
+
   // Check WiFi module
   if (WiFi.status() == WL_NO_MODULE) {
     Serial.println("Communication with WiFi module failed!");
@@ -92,9 +97,13 @@ void handleClient(WiFiClient &client) {
       if (c == '\n') {
         // blank line indicates end of HTTP request headers
         if (currentLine.length() == 0) {
-          // Read latest IMU sample
+          // Read latest accelerometer sample
           if (IMU.accelerationAvailable()) {
             IMU.readAcceleration(ax, ay, az);
+          }
+          // Read latest gyroscope sample (angular velocity in deg/s)
+          if (IMU.gyroscopeAvailable()) {
+            IMU.readGyroscope(gx, gy, gz);
           }
 
           // Send HTTP response with JSON body
@@ -112,6 +121,13 @@ void handleClient(WiFiClient &client) {
           client.print(ay, 6);
           client.print(",\"z\":");
           client.print(az, 6);
+          client.print("},\"gyroValue\":{");
+          client.print("\"x\":");
+          client.print(gx, 6);
+          client.print(",\"y\":");
+          client.print(gy, 6);
+          client.print(",\"z\":");
+          client.print(gz, 6);
           client.println("}}");
 
           break;
