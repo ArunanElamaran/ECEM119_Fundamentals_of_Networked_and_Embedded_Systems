@@ -121,7 +121,7 @@ void handleClient(WiFiClient &client) {
       } else if (c != '\r') {
         currentLine += c;
       }
-      delay(500);
+      delay(10);
     }
   }
 

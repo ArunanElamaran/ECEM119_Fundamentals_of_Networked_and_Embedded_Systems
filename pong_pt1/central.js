@@ -8,9 +8,11 @@ const path = require('path');
 
 // Configure the Arduino paddle endpoint and expected name.
 // Set PONG_PADDLE_HOST in your environment to override the IP.
+// PONG_ARDUINO_TIMEOUT_MS: request timeout in ms (default 5000). Increase if the Arduino uses a large delay() in request handling.
 const ARDUINO_HOST = process.env.PONG_PADDLE_HOST || '172.20.10.7';
 const ARDUINO_PORT = 80;
 const ARDUINO_PATH = '/sensor';
+const ARDUINO_TIMEOUT_MS = parseInt(process.env.PONG_ARDUINO_TIMEOUT_MS || '5000', 10) || 5000;
 const EXPECTED_DEVICE_NAME = 'PongPaddle';
 
 const app = express();
@@ -41,7 +43,7 @@ function fetchImuFromArduino(callback) {
     port: ARDUINO_PORT,
     path: ARDUINO_PATH,
     method: 'GET',
-    timeout: 1000,
+    timeout: ARDUINO_TIMEOUT_MS,
   };
 
   const req = http.request(options, (resp) => {
@@ -109,5 +111,6 @@ app.listen(port, () => {
   console.log(
     `Expecting Arduino paddle at http://${ARDUINO_HOST}:${ARDUINO_PORT}${ARDUINO_PATH} with name "${EXPECTED_DEVICE_NAME}"`,
   );
+  console.log(`Arduino request timeout: ${ARDUINO_TIMEOUT_MS} ms`);
 });
 
